@@ -1,4 +1,6 @@
-﻿namespace DoomLauncher.Models
+﻿using System.Collections.Generic;
+
+namespace DoomLauncher.Models
 {
     public class Mod
     {
@@ -20,12 +22,12 @@
         /// <summary>
         /// WAD path(s)
         /// </summary>
-        public string[] Path { get; set; }
+        public List<string> Path { get; set; }
 
         /// <summary>
         /// WAD filter tags
         /// </summary>
-        public string[] Tags { get; set; }
+        public List<string> Tags { get; set; }
 
         /// <summary>
         /// WAD year
