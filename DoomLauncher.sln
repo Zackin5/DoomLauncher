@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30717.126
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DoomLauncher", "DoomLauncher\DoomLauncher.csproj", "{584B5418-B575-42C0-AC79-53E473FCC019}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{584B5418-B575-42C0-AC79-53E473FCC019}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{584B5418-B575-42C0-AC79-53E473FCC019}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{584B5418-B575-42C0-AC79-53E473FCC019}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{584B5418-B575-42C0-AC79-53E473FCC019}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {34C52AE1-AA32-45EE-B354-4470F0536867}
+	EndGlobalSection
+EndGlobal
