@@ -133,7 +133,7 @@ namespace DoomLauncher
         private static void PrintMods(List<Mod> mods)
         {
             foreach (var modGrouping in mods
-                .OrderBy(f => f.Year).ThenBy(f => f.Description)
+                .OrderBy(f => f.Code).ThenBy(f => f.Description)
                 .Where(f => !string.IsNullOrWhiteSpace(f.Code))
                 .GroupBy(f => f.Category))
             {
@@ -171,16 +171,16 @@ namespace DoomLauncher
             else if (!string.IsNullOrWhiteSpace(_activeLevel.IWad))
                 args += $"-iwad {_activeLevel.IWad} ";
 
-            args += "-file ";
+            args += "-file";
 
             // Mutators
-            args += string.Join(" ", _activeMutators().Select(f => string.Join(" ", f.Path)));
+            args += " " + string.Join(" ", _activeMutators().Select(f => string.Join(" ", f.Path)));
             
             // Mod
-            args += string.Join(" ", _activeMod.Path);
+            args += " " + string.Join(" ", _activeMod.Path);
             
             // Level
-            args += string.Join(" ", _activeLevel.Path);
+            args += " " + string.Join(" ", _activeLevel.Path);
 
             Process.Start(_activeExecutable.Path, args);
         }
