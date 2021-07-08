@@ -15,6 +15,11 @@ namespace DoomLauncher.Models
         public string Code { get; set; }
 
         /// <summary>
+        /// Code of a parent mod to inherit from
+        /// </summary>
+        public string ParentMod { get; set; }
+
+        /// <summary>
         /// Filter category
         /// </summary>
         public string Category { get; set; }

@@ -75,7 +75,10 @@ namespace DoomLauncher
             Console.WriteLine("Pick a gameplay wad:");
             PrintMods(_launcherConfig.Mods);
 
-            _activeModIndex = GetInput(_launcherConfig.Mods);
+            do
+            {
+                _activeModIndex = GetInput(_launcherConfig.Mods);
+            } while (_activeModIndex == -1);
         }
 
         private static void GetLevel()
@@ -102,16 +105,14 @@ namespace DoomLauncher
 
         private static int GetInput(List<Mod> mods)
         {
-            var returnIndex = -1;
             while(true)
             {
                 Console.Write(LanguageConst.ConsolePrompt);
                 var input = Console.ReadLine();
 
-                if(input == null)
+                if(string.IsNullOrWhiteSpace(input))
                 {
-                    Console.WriteLine("Invalid input");
-                    continue;
+                    return -1;
                 }
 
                 var selectedMod = mods?.FindIndex(f =>
@@ -120,14 +121,16 @@ namespace DoomLauncher
                 if (selectedMod != null && selectedMod != -1)
                 {
                     // Valid input
-                    returnIndex = selectedMod.Value;
-                    break;
+                    return selectedMod.Value;
                 }
 
                 Console.WriteLine("Invalid input");
             }
+        }
 
-            return returnIndex;
+        private static Mod GetModByCode(List<Mod> modList, string modCode)
+        {
+            return modList.FirstOrDefault(f => f.Code != null && f.Code.Equals(modCode, StringComparison.OrdinalIgnoreCase));
         }
 
         private static void PrintMods(List<Mod> mods)
@@ -166,23 +169,51 @@ namespace DoomLauncher
         {
             var args = "";
 
+            // TODO: inherit iwads from parents
             if (!string.IsNullOrWhiteSpace(_activeMod.IWad))
                 args += $"-iwad {_activeMod.IWad} ";
-            else if (!string.IsNullOrWhiteSpace(_activeLevel.IWad))
+            else if (!string.IsNullOrWhiteSpace(_activeLevel?.IWad))
                 args += $"-iwad {_activeLevel.IWad} ";
 
             args += "-file";
 
-            // Mutators
-            args += " " + string.Join(" ", _activeMutators().Select(f => string.Join(" ", f.Path)));
-            
-            // Mod
-            args += " " + string.Join(" ", _activeMod.Path);
-            
-            // Level
-            args += " " + string.Join(" ", _activeLevel.Path);
+            // Merge and flatten mod list
+            var modPaths = new List<string>();
+            modPaths.AddRange(GetModPaths(_launcherConfig.Levels, _activeLevel));
+
+            var muts = _launcherConfig.Mutators.Select(fmut => GetModPaths(_launcherConfig.Mutators, fmut));
+
+            foreach (var mut in muts)
+            {
+                modPaths.AddRange(mut);
+            }
+
+            modPaths.AddRange(GetModPaths(_launcherConfig.Mods, _activeMod));
+
+            args += $" \"{string.Join("\" \"", modPaths)}\"";
+
+            // Execute
+            File.Delete(@".\lastArgs.txt");
+            File.WriteAllText(@".\lastArgs.txt", args);
 
             Process.Start(_activeExecutable.Path, args);
+        }
+
+        private static List<string> GetModPaths(List<Mod> modList, Mod mod)
+        {
+            if(mod == null)
+                return new List<string>();
+
+            var result = new List<string>();
+
+            if (mod.ParentMod != null)
+            {
+                result.AddRange(GetModPaths(modList, GetModByCode(modList, mod.ParentMod)));
+            }
+
+            result.AddRange(mod.Path);
+
+            return result;
         }
     }
 }
