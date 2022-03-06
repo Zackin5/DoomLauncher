@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30717.126
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DoomLauncher", "DoomLauncher\DoomLauncher.csproj", "{584B5418-B575-42C0-AC79-53E473FCC019}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DoomLauncher", "DoomLauncher\DoomLauncher.csproj", "{584B5418-B575-42C0-AC79-53E473FCC019}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BatchLauncherParser", "BatchLauncherParser\BatchLauncherParser.csproj", "{03636500-0D8F-4BBF-8950-EA96AF33EF62}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BatchLauncherParser", "BatchLauncherParser\BatchLauncherParser.csproj", "{03636500-0D8F-4BBF-8950-EA96AF33EF62}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

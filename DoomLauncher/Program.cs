@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Drawing;
 using DoomLauncher.Constants;
 using DoomLauncher.Models;
+using DoomLauncher.Enums;
 using Newtonsoft.Json;
+using Console = Colorful.Console;
 
 namespace DoomLauncher
 {
@@ -54,20 +57,44 @@ namespace DoomLauncher
             }
 
             _launcherConfig = JsonConvert.DeserializeObject<LauncherConfig>(File.ReadAllText(settingsPath));
-            
-            GetMod();
 
-            if(!string.IsNullOrWhiteSpace(_activeMod.IWad))
-                ExecuteDoom();
+            var launcherState = LauncherState.Mod;
+            var previousState = launcherState;
+            while (launcherState != LauncherState.Execute)
+            {
+                switch (launcherState)
+                {
+                    case LauncherState.Mod:
+                        GetMod(out launcherState);
+                        break;
 
-            GetLevel();
+                    case LauncherState.Level:
+                        if (!string.IsNullOrWhiteSpace(_activeMod.IWad))
+                        {
+                            launcherState = LauncherState.Execute;
+                            break;
+                        }
 
-            ExecuteDoom();
+                        GetLevel(out launcherState);
+                        break;
+
+                    case LauncherState.Mutator:
+                        GetMutator(previousState, out launcherState);
+                        break;
+
+                    default:
+                        throw new NotSupportedException();
+                }
+
+                previousState = launcherState;
+            }
+
+            ExecuteDoom(args);
 
             return 0;
         }
 
-        private static void GetMod()
+        private static void GetMod(out LauncherState nextState)
         {
             Console.Clear();
             WriteMenu();
@@ -77,11 +104,14 @@ namespace DoomLauncher
 
             do
             {
-                _activeModIndex = GetInput(_launcherConfig.Mods);
+                _activeModIndex = GetInput(_launcherConfig.Mods, out nextState);
             } while (_activeModIndex == -1);
+
+            if (nextState == LauncherState.None)
+                nextState = LauncherState.Level;
         }
 
-        private static void GetLevel()
+        private static void GetLevel(out LauncherState nextState)
         {
             Console.Clear();
             WriteMenu();
@@ -89,10 +119,13 @@ namespace DoomLauncher
             Console.WriteLine("Pick a level wad:");
             PrintMods(_launcherConfig.Levels);
 
-            _activeLevelIndex = GetInput(_launcherConfig.Levels);
+            _activeLevelIndex = GetInput(_launcherConfig.Levels, out nextState);
+
+            if (nextState == LauncherState.None)
+                nextState = LauncherState.Execute;
         }
 
-        private static void GetMutator()
+        private static void GetMutator(LauncherState previousState, out LauncherState nextState)
         {
             Console.Clear();
             WriteMenu();
@@ -100,18 +133,29 @@ namespace DoomLauncher
             Console.WriteLine("Add a mutator:");
             PrintMods(_launcherConfig.Mutators);
 
-            _activeMutatorIndexes.Add(GetInput(_launcherConfig.Mutators));
+            _activeMutatorIndexes.Add(GetInput(_launcherConfig.Mutators, out nextState));
+
+            if (nextState == LauncherState.None)
+                nextState = previousState;
         }
 
-        private static int GetInput(List<Mod> mods)
+        private static int GetInput(List<Mod> mods, out LauncherState nextState)
         {
-            while(true)
+            nextState = LauncherState.None;
+
+            while (true)
             {
                 Console.Write(LanguageConst.ConsolePrompt);
                 var input = Console.ReadLine();
 
                 if(string.IsNullOrWhiteSpace(input))
                 {
+                    return -1;
+                }
+
+                if(input.Equals("m", StringComparison.OrdinalIgnoreCase))
+                {
+                    nextState = LauncherState.Mutator;
                     return -1;
                 }
 
@@ -136,16 +180,24 @@ namespace DoomLauncher
         private static void PrintMods(List<Mod> mods)
         {
             foreach (var modGrouping in mods
-                .OrderBy(f => f.Code).ThenBy(f => f.Description)
                 .Where(f => !string.IsNullOrWhiteSpace(f.Code))
-                .GroupBy(f => f.Category))
+                .GroupBy(f => f.Category)
+                .OrderBy(f => f.Key))
             {
                 if(!string.IsNullOrWhiteSpace(modGrouping.Key))
                     Console.WriteLine(modGrouping.Key);
 
-                foreach (var configMod in modGrouping)
+                var orderedMods = modGrouping
+                    .Select((mod, i) => new { mod, i })
+                    .OrderBy(f => f.mod.Code).ThenBy(f => f.mod.Description);
+
+                for (var i = 0; i < orderedMods.Count(); i++)
                 {
-                    Console.WriteLine($"{configMod.Code,-5}- {configMod.Description}");
+                    var configMod = orderedMods.ElementAt(i);
+                    //var colorPower = (int)((configMod.i / (double)modGrouping.Count()) * 255);
+                    var colorPower = 255 - (int)((Math.Clamp(modGrouping.Count() - configMod.i, 0, 5) / 5.0) * 255);
+
+                    Console.WriteLine($"{configMod.mod.Code,-5}- {configMod.mod.Description}", Color.FromArgb(255, colorPower, 0));
                 }
 
                 Console.WriteLine();
@@ -165,8 +217,15 @@ namespace DoomLauncher
             Console.WriteLine($"EXEC:{_activeExecutable?.Code}  MOD:{_activeMod?.Code}  LVL:{_activeLevel?.Code} MUT:{mutatorNames}\n");
         }
 
-        private static void ExecuteDoom()
+        private static string FormatArg(IEnumerable<string> args)
         {
+            return string.Join(' ', args.Select(f => f.Contains(' ') ? $"\"{f}\"" : f));
+        }
+
+        private static void ExecuteDoom(string[] passedArgs)
+        {
+            WriteHistory();
+
             var args = "";
 
             // TODO: inherit iwads from parents
@@ -190,7 +249,7 @@ namespace DoomLauncher
 
             modPaths.AddRange(GetModPaths(_launcherConfig.Mods, _activeMod));
 
-            args += $" \"{string.Join("\" \"", modPaths)}\"";
+            args += $" {FormatArg(modPaths)} {FormatArg(passedArgs)}";
 
             // Execute
             File.Delete(@".\lastArgs.txt");
@@ -214,6 +273,12 @@ namespace DoomLauncher
             result.AddRange(mod.Path);
 
             return result;
+        }
+
+        private static void WriteHistory()
+        {
+            using var writer = File.AppendText(@".\history.txt");
+            writer.WriteLine($"{_activeMod?.Code}, {_activeLevel?.Code}, {string.Join(" ", _launcherConfig?.Mutators?.Select(f => f.Code))}");
         }
     }
 }
