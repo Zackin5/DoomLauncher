@@ -159,6 +159,7 @@ namespace DoomLauncher
                     return -1;
                 }
 
+                // Find mod and execute
                 var selectedMod = mods?.FindIndex(f =>
                     f.Code != null && f.Code.Equals(input, StringComparison.OrdinalIgnoreCase));
 
@@ -168,7 +169,21 @@ namespace DoomLauncher
                     return selectedMod.Value;
                 }
 
-                Console.WriteLine("Invalid input");
+                // Report invalid input (with fuzzy search)
+                var fuzzyModCodes = FuzzySharp.Process
+                    .ExtractAll(input, mods.Select(f => f?.Code ?? string.Empty), cutoff: 80)
+                    .Select(f => f.Value)
+                    .ToList();
+                
+                if (fuzzyModCodes.Any())
+                {
+                    Console.WriteLine("Invalid input. Did you mean one of these?");
+                    PrintMods(mods.Where(f => fuzzyModCodes.Contains(f.Code)));
+                }
+                else
+                {
+                    Console.WriteLine("Invalid input.");
+                }
             }
         }
 
@@ -177,7 +192,7 @@ namespace DoomLauncher
             return modList.FirstOrDefault(f => f.Code != null && f.Code.Equals(modCode, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static void PrintMods(List<Mod> mods)
+        private static void PrintMods(IEnumerable<Mod> mods)
         {
             foreach (var modGrouping in mods
                 .Where(f => !string.IsNullOrWhiteSpace(f.Code))
