@@ -7,7 +7,7 @@ using System.Drawing;
 using DoomLauncher.Constants;
 using DoomLauncher.Models;
 using DoomLauncher.Enums;
-using Newtonsoft.Json;
+using DoomLauncher.Utilities;
 using Console = Colorful.Console;
 
 namespace DoomLauncher
@@ -16,24 +16,24 @@ namespace DoomLauncher
     {
         private static LauncherConfig _launcherConfig;
         private static int _activeExecutableIndex;
-        private static int? _activeModIndex;
-        private static int? _activeLevelIndex;
-        private static List<int> _activeMutatorIndexes;
+        private static (string category, int index) _activeModReference;
+        private static (string category, int index) _activeLevelReference;
+        private static List<(string category, int index)> _activeMutatorReferences;
 
         private static DoomExecutable _activeExecutable =>
             _launcherConfig?.Executables.ElementAtOrDefault(_activeExecutableIndex);
-        private static Mod _activeMod =>
-            _launcherConfig?.Mods.ElementAtOrDefault(_activeModIndex ?? -1);
-        private static Mod _activeLevel =>
-            _launcherConfig?.Levels.ElementAtOrDefault(_activeLevelIndex ?? -1);
+        private static Mod _activeMod => _activeModReference.category != null ?
+            _launcherConfig?.Mods[_activeModReference.category].ElementAtOrDefault(_activeModReference.index) : null;
+        private static Mod _activeLevel => _activeLevelReference.category != null ?
+            _launcherConfig?.Levels[_activeLevelReference.category].ElementAtOrDefault(_activeLevelReference.index) : null;
         private static List<Mod> _activeMutators()
         {
             var results = new List<Mod>();
 
-            if (_activeMutatorIndexes != null)
-                foreach (var activeMutator in _activeMutatorIndexes)
+            if (_activeMutatorReferences != null)
+                foreach (var activeMutator in _activeMutatorReferences)
                 {
-                    results.Add(_launcherConfig.Mods.ElementAtOrDefault(activeMutator));
+                    results.Add(_launcherConfig.Mods[activeMutator.category].ElementAtOrDefault(activeMutator.index));
                 }
 
             return results;
@@ -41,23 +41,28 @@ namespace DoomLauncher
 
         static int Main(string[] args)
         {
+            // Load settings file
             const string settingsPath = @".\DoomSettings.json";
-            if (!File.Exists(settingsPath))
-            {
-                File.WriteAllText(settingsPath, JsonConvert.SerializeObject(new LauncherConfig
-                {
-                    Executables = new List<DoomExecutable>{new DoomExecutable()},
-                    Levels = new List<Mod>{new Mod()},
-                    Mods = new List<Mod>{new Mod()},
-                    Mutators = new List<Mod>{new Mod()}
-                }, Formatting.Indented));
 
-                Console.WriteLine("Failed to load configuration settings.\nA default empty settings file was created.");
-                return -1;
+            var (resultCode, config) = SettingsParserUtil.ParseSettings(settingsPath);
+
+            switch (resultCode)
+            {
+                case SettingParserResult.Success:
+                    _launcherConfig = config;
+                    break;
+
+                case SettingParserResult.FailFileNotFound:
+                    SettingsParserUtil.CreateDefaultSettings(settingsPath);
+                    Console.WriteLine("Failed to load configuration settings.\nA default empty settings file was created.");
+                    return -404;
+
+                default:
+                    Console.WriteLine("An unexpected error occured while trying to parse configuration settings file.");
+                    return -1;
             }
 
-            _launcherConfig = JsonConvert.DeserializeObject<LauncherConfig>(File.ReadAllText(settingsPath));
-
+            // Execute logic
             var launcherState = LauncherState.Mod;
             var previousState = launcherState;
             while (launcherState != LauncherState.Execute)
@@ -100,12 +105,12 @@ namespace DoomLauncher
             WriteMenu();
 
             Console.WriteLine("Pick a gameplay wad:");
-            PrintMods(_launcherConfig.Mods);
+            PrintModsByCategory(_launcherConfig.Mods);
 
             do
             {
-                _activeModIndex = GetInput(_launcherConfig.Mods, out nextState);
-            } while (_activeModIndex == -1);
+                _activeModReference = GetInput(_launcherConfig.Mods, out nextState);
+            } while (_activeModReference.index == -1);
 
             if (nextState == LauncherState.None)
                 nextState = LauncherState.Level;
@@ -117,9 +122,9 @@ namespace DoomLauncher
             WriteMenu();
 
             Console.WriteLine("Pick a level wad:");
-            PrintMods(_launcherConfig.Levels);
+            PrintModsByCategory(_launcherConfig.Levels);
 
-            _activeLevelIndex = GetInput(_launcherConfig.Levels, out nextState);
+            _activeLevelReference = GetInput(_launcherConfig.Levels, out nextState);
 
             if (nextState == LauncherState.None)
                 nextState = LauncherState.Execute;
@@ -131,15 +136,15 @@ namespace DoomLauncher
             WriteMenu();
 
             Console.WriteLine("Add a mutator:");
-            PrintMods(_launcherConfig.Mutators);
+            PrintModsByCategory(_launcherConfig.Mutators);
 
-            _activeMutatorIndexes.Add(GetInput(_launcherConfig.Mutators, out nextState));
+            _activeMutatorReferences.Add(GetInput(_launcherConfig.Mutators, out nextState));
 
             if (nextState == LauncherState.None)
                 nextState = previousState;
         }
 
-        private static int GetInput(List<Mod> mods, out LauncherState nextState)
+        private static (string category, int index) GetInput(Dictionary<string, List<Mod>> modDictionaries, out LauncherState nextState)
         {
             nextState = LauncherState.None;
 
@@ -150,35 +155,50 @@ namespace DoomLauncher
 
                 if(string.IsNullOrWhiteSpace(input))
                 {
-                    return -1;
+                    return (string.Empty, -1);
                 }
 
                 if(input.Equals("m", StringComparison.OrdinalIgnoreCase))
                 {
                     nextState = LauncherState.Mutator;
-                    return -1;
+                    return (string.Empty, -1);
                 }
 
-                // Find mod and execute
-                var selectedMod = mods?.FindIndex(f =>
-                    f.Code != null && f.Code.Equals(input, StringComparison.OrdinalIgnoreCase));
-
-                if (selectedMod != null && selectedMod != -1)
+                if(input.Equals("RAND", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Valid input
-                    return selectedMod.Value;
+                    var rand = new Random();
+
+                    var (category, mods) = modDictionaries.ElementAt(rand.Next(0, modDictionaries.Count - 1));
+                    var modIndex = rand.Next(0, mods.Count - 1);
+
+                    return (category, modIndex);
                 }
 
-                // Report invalid input (with fuzzy search)
+                // If we match on a mod, return it's category and index
+                foreach (var (category, mods) in modDictionaries)
+                {
+                    foreach (var (mod, i) in mods.Select((f, i) => (f, i)))
+                    {
+                        if (mod.Code != null && mod.Code.Equals(input, StringComparison.OrdinalIgnoreCase))
+                            return (category, i);
+                    }
+                }
+
+                // If we failed to find mod, report invalid input (with fuzzy search)
                 var fuzzyModCodes = FuzzySharp.Process
-                    .ExtractAll(input, mods.Select(f => f?.Code ?? string.Empty), cutoff: 80)
+                    .ExtractAll(
+                        input, 
+                        modDictionaries.Values
+                            .SelectMany(f => f)
+                            .Select(f => f?.Code ?? string.Empty), 
+                        cutoff: 80)
                     .Select(f => f.Value)
                     .ToList();
                 
                 if (fuzzyModCodes.Any())
                 {
                     Console.WriteLine("Invalid input. Did you mean one of these?");
-                    PrintMods(mods.Where(f => fuzzyModCodes.Contains(f.Code)));
+                    PrintMods(modDictionaries.Values.SelectMany(f => f).Where(f => fuzzyModCodes.Contains(f.Code)));
                 }
                 else
                 {
@@ -187,46 +207,48 @@ namespace DoomLauncher
             }
         }
 
-        private static Mod GetModByCode(List<Mod> modList, string modCode)
+        private static Mod GetModByCode(Dictionary<string, List<Mod>> modList, string modCode)
         {
-            return modList.FirstOrDefault(f => f.Code != null && f.Code.Equals(modCode, StringComparison.OrdinalIgnoreCase));
+            return modList.Values.SelectMany(f => f).FirstOrDefault(f => f.Code != null && f.Code.Equals(modCode, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void PrintModsByCategory(Dictionary<string, List<Mod>> modDictionaries)
+        {
+            foreach (var (category, mods) in modDictionaries)
+            {
+                if(!string.IsNullOrWhiteSpace(category))
+                    Console.WriteLine(category);
+
+                PrintMods(mods);
+            }
         }
 
         private static void PrintMods(IEnumerable<Mod> mods)
         {
-            foreach (var modGrouping in mods
-                .Where(f => !string.IsNullOrWhiteSpace(f.Code))
-                .GroupBy(f => f.Category)
-                .OrderBy(f => f.Key))
+            var orderedMods = mods
+                .Select((mod, i) => new { mod, i })
+                .OrderBy(f => f.mod.Code).ThenBy(f => f.mod.Description);
+
+            for (var i = 0; i < orderedMods.Count(); i++)
             {
-                if(!string.IsNullOrWhiteSpace(modGrouping.Key))
-                    Console.WriteLine(modGrouping.Key);
+                var configMod = orderedMods.ElementAt(i);
+                //var colorPower = (int)((configMod.i / (double)mods.Count()) * 255);
+                var colorPower = 255 - (int)((Math.Clamp(mods.Count() - configMod.i, 0, 5) / 5.0) * 255);
 
-                var orderedMods = modGrouping
-                    .Select((mod, i) => new { mod, i })
-                    .OrderBy(f => f.mod.Code).ThenBy(f => f.mod.Description);
-
-                for (var i = 0; i < orderedMods.Count(); i++)
-                {
-                    var configMod = orderedMods.ElementAt(i);
-                    //var colorPower = (int)((configMod.i / (double)modGrouping.Count()) * 255);
-                    var colorPower = 255 - (int)((Math.Clamp(modGrouping.Count() - configMod.i, 0, 5) / 5.0) * 255);
-
-                    Console.WriteLine($"{configMod.mod.Code,-5}- {configMod.mod.Description}", Color.FromArgb(255, colorPower, 0));
-                }
-
-                Console.WriteLine();
+                Console.WriteLine($"{configMod.mod.Code,-5}- {configMod.mod.Description}", Color.FromArgb(255, colorPower, 0));
             }
+
+            Console.WriteLine();
         }
 
         private static void WriteMenu()
         {
             var mutatorNames = "";
 
-            if (_activeMutatorIndexes != null)
-                foreach (var activeMutator in _activeMutatorIndexes)
+            if (_activeMutatorReferences != null)
+                foreach (var (mutatorCategory, mutatorIndex) in _activeMutatorReferences)
                 {
-                    mutatorNames += _launcherConfig.Mods.ElementAtOrDefault(activeMutator)?.Code + ",";
+                    mutatorNames += _launcherConfig.Mods[mutatorCategory].ElementAtOrDefault(mutatorIndex)?.Code + ",";
                 }
 
             Console.WriteLine($"EXEC:{_activeExecutable?.Code}  MOD:{_activeMod?.Code}  LVL:{_activeLevel?.Code} MUT:{mutatorNames}\n");
@@ -255,12 +277,13 @@ namespace DoomLauncher
             var modPaths = new List<string>();
             modPaths.AddRange(GetModPaths(_launcherConfig.Levels, _activeLevel));
 
-            var muts = _launcherConfig.Mutators.Select(fmut => GetModPaths(_launcherConfig.Mutators, fmut));
+            // TODO: implement/update mutators
+            /*var muts = _launcherConfig.Mutators.Select(fmut => GetModPaths(_launcherConfig.Mutators, fmut));
 
             foreach (var mut in muts)
             {
                 modPaths.AddRange(mut);
-            }
+            }*/
 
             modPaths.AddRange(GetModPaths(_launcherConfig.Mods, _activeMod));
 
@@ -273,7 +296,7 @@ namespace DoomLauncher
             Process.Start(_activeExecutable.Path, args);
         }
 
-        private static List<string> GetModPaths(List<Mod> modList, Mod mod)
+        private static List<string> GetModPaths(Dictionary<string, List<Mod>> modList, Mod mod)
         {
             if(mod == null)
                 return new List<string>();
@@ -293,7 +316,7 @@ namespace DoomLauncher
         private static void WriteHistory()
         {
             using var writer = File.AppendText(@".\history.txt");
-            writer.WriteLine($"{_activeMod?.Code}, {_activeLevel?.Code}, {string.Join(" ", _launcherConfig?.Mutators?.Select(f => f.Code))}");
+            writer.WriteLine($"{_activeMod?.Code}, {_activeLevel?.Code}, {string.Join(" ", _activeMutators()?.Select(f => f.Code))}");
         }
     }
 }

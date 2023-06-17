@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace DoomLauncher.Models
 {
@@ -22,6 +23,7 @@ namespace DoomLauncher.Models
         /// <summary>
         /// Filter category
         /// </summary>
+        [Obsolete("Category is stored by the JSON structure")]
         public string Category { get; set; }
 
         /// <summary>

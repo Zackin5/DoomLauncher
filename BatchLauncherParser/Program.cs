@@ -20,7 +20,7 @@ namespace BatchLauncherParser
 
             var fileLines = File.ReadAllLines(filePath);
 
-            var parsedConfig = new LauncherConfig
+            var parsedConfig = new LauncherConfigV1
             {
                 Mods = new List<Mod>(),
                 Levels = new List<Mod>(),
