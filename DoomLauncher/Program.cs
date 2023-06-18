@@ -25,7 +25,7 @@ namespace DoomLauncher
         private static Mod _activeMod => _activeModReference.category != null ?
             _launcherConfig?.Mods[_activeModReference.category].ElementAtOrDefault(_activeModReference.index) : null;
         private static Mod _activeLevel => _activeLevelReference.category != null ?
-            _launcherConfig?.Levels[_activeLevelReference.category].ElementAtOrDefault(_activeLevelReference.index) : null;
+            _launcherConfig?.Levels.GetValueOrDefault(_activeLevelReference.category)?.ElementAtOrDefault(_activeLevelReference.index) : null;
         private static List<Mod> _activeMutators()
         {
             var results = new List<Mod>();
